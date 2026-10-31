@@ -1,0 +1,99 @@
+MYFIRSTHACK - SENTINEL SOC HOME LAB - KQL QUERIES
+Run these on the query page:
+  Defender portal: Investigation & response > Hunting > Advanced hunting
+  Azure portal:    Microsoft Sentinel > Logs
+
+==================================================================
+PART 4 - VERIFY: are the logs arriving?
+==================================================================
+
+// Windows Security events, grouped by event ID
+SecurityEvent
+| summarize count() by EventID
+| sort by count_ desc
+
+// Sysmon events, grouped by event ID
+WindowsEvent
+| where Channel == "Microsoft-Windows-Sysmon/Operational"
+| summarize count() by EventID
+
+// A quick look at raw Sysmon events
+WindowsEvent
+| where Channel == "Microsoft-Windows-Sysmon/Operational"
+| take 20
+
+
+==================================================================
+PART 5 - DETECT
+==================================================================
+
+// Failed logons by account and source
+SecurityEvent
+| where EventID == 4625
+| summarize FailedAttempts = count() by TargetAccount, Computer, IpAddress
+| sort by FailedAttempts desc
+
+// THE ANALYTICS RULE QUERY
+// Ten or more failed logons for the same account within the lookup window
+SecurityEvent
+| where EventID == 4625
+| summarize FailedAttempts = count(),
+            FirstSeen = min(TimeGenerated),
+            LastSeen = max(TimeGenerated)
+    by TargetAccount, Computer, IpAddress
+| where FailedAttempts >= 10
+
+
+==================================================================
+PART 6 - INVESTIGATE
+==================================================================
+
+// Timeline of every failed logon for the account
+SecurityEvent
+| where EventID == 4625
+| where TargetAccount has "labtest"
+| project TimeGenerated, Computer, TargetAccount, IpAddress, LogonType, Status, SubStatus
+| sort by TimeGenerated asc
+
+// Did any attempt succeed? (4624 = success, 4625 = failure)
+SecurityEvent
+| where EventID in (4624, 4625)
+| where TargetAccount has "labtest"
+| summarize Count = count() by EventID, TargetAccount
+
+// Failed logons per hour across the whole VM
+SecurityEvent
+| where EventID == 4625
+| summarize Attempts = count() by bin(TimeGenerated, 1h)
+| sort by TimeGenerated asc
+
+
+==================================================================
+EXTRA - SYSMON HUNTING
+==================================================================
+
+// Process creation (Event ID 1) - everything that ran on the VM
+WindowsEvent
+| where Channel == "Microsoft-Windows-Sysmon/Operational"
+| where EventID == 1
+| take 30
+
+// Network connections (Event ID 3)
+WindowsEvent
+| where Channel == "Microsoft-Windows-Sysmon/Operational"
+| where EventID == 3
+| take 30
+
+// Successful logons
+SecurityEvent
+| where EventID == 4624
+| project TimeGenerated, Account, IpAddress, LogonType
+| sort by TimeGenerated desc
+
+
+READING THE RESULTS
+- IpAddress of 127.0.0.1 or "-" means the attempt came from the VM itself.
+- LogonType 3 is a network logon. LogonType 10 is Remote Desktop.
+- SubStatus 0xc0000064 = the username does not exist.
+- SubStatus 0xc000006a = a real username with the wrong password.
+- To read one Sysmon event in full, click the row and expand EventData.
