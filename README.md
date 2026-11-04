@@ -25,15 +25,21 @@ A home SOC lab built in Microsoft Azure. I deployed Microsoft Sentinel, connecte
 **Sentinel workspace**
 
 ![Sentinel overview](screenshots/01-sentinel-overview.png)
+This screenshot shows the Microsoft Sentinel environment configured with an Azure Log Analytics workspace. The workspace serves as the central location for collecting and analyzing security events from the lab enviornment.
 
 **Virtual machine with Sysmon**
 
 ![VM running](screenshots/02-vm-running.png)
+
+This screenshot shows my Windows Server 2022 virtual machine running in Microsoft Azure. The VM serves as the monitored endpoint where I generated failed authentication attempts to test my detection rule.
+
 ![Sysmon running](screenshots/03-sysmon-running.png)
+This screenshot demonstrates that Sysmon was installed and running on my Windows virtual machine using the SwiftOnSecurity configuration.
 
 **Data collection rules**
 
 ![Data collection rules](screenshots/04-data-collection-rules.png)
+This screenshot shows the two Data Collection Rules configured in Azure to collect Windows Security events and Sysmon logs from my virtual machine through the Azure Monitor Agent. These rules send the collected logs to Log Analytics workspace
 
 ## Verifying log ingestion
 
@@ -46,7 +52,7 @@ SecurityEvent
 ```
 
 ![SecurityEvent query](screenshots/05-securityevent-query.png)
-
+This screenshot shows my KQL query against the SecurityEvent table in Log Analytics. The query summarized Windows Security events by Event ID, allowing me to verify that security logs from my virtual machine were successfully ingested
 Sysmon events arriving in Sentinel:
 
 ```kql
@@ -56,11 +62,12 @@ WindowsEvent
 ```
 
 ![Sysmon query](screenshots/06-sysmon-query.png)
+This screenshot shows my KQL quert against the WindowsEvent table, filetered to the Microsoft-Windows-Sysmon/Operational channel.
 
 ## Detection rule
 
-**Name:** Lab - Multiple failed logons for one account
-**Logic:** ten or more failed logons (Event ID 4625) for the same account within one hour
+**Name:** Lab - Multiple failed logons per Account, Host, and Source IP
+**Logic:** ten or more failed logons (Event ID 4625) within a one-hour lookback window, grouped by target account, computer, and source IP address
 **Severity:** Medium
 **MITRE ATT&CK:** Credential Access, T1110 Brute Force
 **Schedule:** runs every 5 minutes, looks back 1 hour
@@ -76,12 +83,16 @@ SecurityEvent
 ```
 
 ![Analytics rule](screenshots/07-analytics-rule.png)
+This screenshot shows the custom scheduled analytics rule I created in Microsoft Sentinel to detect potential brute-force activity.
 
 ## Testing the detection
 
-I simulated a password-guessing attack on the VM by making 15 failed logon attempts for a test account. The rule raised an incident 60 minutes later.
+I simulated a brute-force attack against a test account on my Windows virtual machine by generating 15 failed logon attempts per test. I repeated the test 3 times to validate that the detection rule was working correctly. The detection rule successfully identified the threshold of 10 or more failed authentication attempts and generated a security incident for investigation.
+
+The incident appeared approximately 60 minutes after the initial testing activity, although the analytics rule was configured to run every 5 minutes with a 1-hour lookback window. The delay may have resulted from log ingestion latency or the timing of the rule's initial execution.
 
 ![Incident](screenshots/08-incident.png)
+This shows the security incident generated in Microsoft Sentinel following my simulated failed logon attempts. The incident demonstrates that the analytics rule detected the authentication activity and created an alert for investigation.
 
 ## Investigation
 
@@ -96,6 +107,7 @@ I simulated a password-guessing attack on the VM by making 15 failed logon attem
 | What I would do in a real case | Block the source IP, check the account for lockout, look for a successful logon after the failures |
 
 ![Incident closed](screenshots/09-incident-closed.png)
+This shows the incident after I completed my investigation and closed it as expected testing activity. I confirmed that the failed authentication attempts were generated during my own lab simulation and that no successful logons were associated with the test account.
 
 ## What I learned
 
